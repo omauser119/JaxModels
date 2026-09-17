@@ -22,4 +22,4 @@ const client = new TypeSafeClient({
 
 Локальный ключ `local-development` удовлетворяет требованию SDK. Если сервер запущен с `JAX_SERVICE_TOKEN`, нужен именно этот токен. Адрес включает только корень: SDK сам добавляет `/v1/systemone` или `/v1/models`. Не оставляйте defaultModel по умолчанию: SDK выбирает Jev, которого наш сервер не предоставляет.
 
-Поддержаны `systemOne`, `models.list`, `withResponse`, request ID, ошибки HTTP, Choice/Score/Noul. Лимиты и численные semantics — [профиль Abel](../../docs/PRODUCTION.md). Веса, качество, confidence и производительность не тождественны Jev. Пример вызывает только localhost.
+Поддержаны `systemOne`, `models.list`, `withResponse`, request ID, ошибки HTTP, Choice/Score/Noul. Лимиты и численные semantics — [профиль Abel](../../docs/SERVING.md). Веса, качество, confidence и производительность не тождественны Jev. Пример вызывает только localhost.
