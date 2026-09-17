@@ -1,0 +1,6 @@
+{"id":"train-a","split":"train","family":"greeting","group":"train-a","state":{"text":"Hello, good morning."},"question":{"type":"noul","instructions":"Does text greet the reader?"}}
+{"id":"train-b","split":"train","family":"color","group":"train-b","state":{"color":"blue"},"question":{"type":"choice","instructions":"Which color is explicitly stated in color?","criteria":{"blue":"Color blue","red":"Color red"}}}
+{"id":"val-a","split":"validation","family":"completion","group":"val-a","state":{"done":false},"question":{"type":"score","instructions":"Rate task completion using done.","criteria":["done is false; unfinished","done is true; finished"]}}
+{"id":"cal-a","split":"calibration","family":"greeting","group":"cal-a","state":{"text":"Goodbye. I am leaving."},"question":{"type":"noul","instructions":"Does text greet the reader rather than say goodbye?"}}
+{"id":"test-a","split":"test","family":"greeting","group":"test-a","state":{"text":"Здравствуйте!"},"question":{"type":"noul","instructions":"Содержит ли text приветствие?"}}
+{"id":"test-b","split":"test","family":"completion","group":"test-b","state":{"finished":true},"question":{"type":"noul","instructions":"Is finished explicitly true?"}}

@@ -1,0 +1,35 @@
+{
+  "format": "jax.local-gguf-distillation.v2",
+  "chunk_size": 8,
+  "teacher_backend": "local-llama.cpp",
+  "remote_teacher_supported": true,
+  "teacher_path": "WORKSPACE/models/Qwen3.5-2B-Q4_K_M.gguf",
+  "teacher_sha256": "aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223",
+  "teacher_shards_sha256": {
+    "WORKSPACE/models/Qwen3.5-2B-Q4_K_M.gguf": "aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223"
+  },
+  "teacher_context": 2048,
+  "teacher_threads": 2,
+  "teacher_template": "auto",
+  "student_sha256": "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c",
+  "dataset_sha256": "27cb5fdc4e67962fc3165d0b912e349cd2ed9f9368d2c50caa821d6773f4e6fd",
+  "split_counts": {
+    "train": 70,
+    "validation": 10,
+    "calibration": 10,
+    "test": 10
+  },
+  "binary_sha256": {
+    "abel-features": "00191b043af83d0fc5ede8c936361a7ecddd02ef645778d9b5bbc05a7ef7fafb",
+    "distill-train": "b7a0777aabb91e26e1f0c84e0f31b7fefe86cd5581769a2d8c0a3deccd6c953b",
+    "gguf-teacher": "66bb93fde8edf9eba128fdabd686a4bbf452566ea4351c52c9017a3b3227b487"
+  },
+  "pipeline_sha256": "3fd8559ed63912fe99ab3b3669b67c18c2a3d7f010c62761e332271a2972930a",
+  "chunk_cache_sha256": "c2013e920bab89d46a1531b82ac3c2f594bb445466f60f9160721f8464eaaeef",
+  "teacher_probability_temperature": 1,
+  "student_context": 2048,
+  "student_threads": 2,
+  "teacher_gpu_layers": 0,
+  "student_gpu_layers": 0,
+  "canonical_tasks_sha256": "27cb5fdc4e67962fc3165d0b912e349cd2ed9f9368d2c50caa821d6773f4e6fd"
+}

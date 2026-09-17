@@ -1,0 +1,16 @@
+{
+  "release": "0.2.0-pilot.1",
+  "platform": "Linux CPU, 2 threads",
+  "checks": {
+    "make_check_runtime": "passed",
+    "gpu_options_cpu_rejection": "passed",
+    "official_typesafe_sdk": "passed",
+    "native_cli_http_parity": "passed",
+    "head_replay_sha256": "281fbdb5c622fa354bfdf211668eceab02c0d56f532fa24f6d263b6be30d98e8",
+    "cached_features_live_parity_and_question_isolation": "passed"
+  },
+  "cuda_hardware_tested": false,
+  "jev_comparison_run": false,
+  "production_qualified": false,
+  "notes": "Existing pinned llama.cpp CPU libraries reused; public C++ executables rebuilt. SDK 0.6.0 tested against a separate localhost server."
+}

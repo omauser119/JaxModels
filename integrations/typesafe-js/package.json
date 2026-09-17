@@ -1,0 +1,7 @@
+{
+  "name": "jax-abel-typesafe-compatibility",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node compatibility.mjs", "example": "node example.mjs"},
+  "dependencies": {"@typesafe-ai/sdk": "0.6.0"}
+}

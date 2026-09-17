@@ -1,0 +1,239 @@
+#!/usr/bin/env python3
+"""Distillation from local GGUF or explicit OpenAI-compatible API teachers."""
+import argparse
+import collections
+import hashlib
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import struct
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from service.app import strict_json, validate_request
+sys.path.insert(0, str(ROOT / 'scripts'))
+from chunk_cache import ChunkCache, atomic_json
+from api_teacher import base_url, DISCLAIMER
+
+
+def sha(path):
+    with path.open('rb') as f: return hashlib.file_digest(f, 'sha256').hexdigest()
+
+def local_gguf(value):
+    if '://' in value:
+        raise ValueError('--teacher requires a local GGUF file; use --teacher-backend openai for APIs')
+    path = Path(value).expanduser().resolve(strict=True)
+    if not path.is_file(): raise ValueError('GGUF path must be a regular file')
+    with path.open('rb') as f: header = f.read(8)
+    if len(header) != 8 or header[:4] != b'GGUF' or struct.unpack('<I', header[4:])[0] not in (2, 3):
+        raise ValueError('Expected a local GGUF v2/v3 file')
+    return path
+
+
+def teacher_files(path):
+    match = re.search(r'-(\d{5})-of-(\d{5})\.gguf$', path.name)
+    if not match:
+        return [path]
+    if int(match[1]) != 1:
+        raise ValueError('For a sharded GGUF teacher, select shard 00001')
+    count = int(match[2])
+    if not 1 <= count <= 1024:
+        raise ValueError('invalid GGUF shard count')
+    prefix = path.name[:match.start()]
+    return [local_gguf(str(path.parent / f'{prefix}-{i:05d}-of-{count:05d}.gguf')) for i in range(1, count + 1)]
+
+
+def preflight(path):
+    rows = []
+    ids, groups, contents = set(), {}, {}
+    with path.open() as f:
+        for number, line in enumerate(f, 1):
+            if not line.strip(): continue
+            if len(line.encode()) > 256 * 1024: raise ValueError('task exceeds 256 KiB')
+            row = strict_json(line)
+            if not isinstance(row, dict) or set(row) != {'id', 'split', 'family', 'group', 'state', 'question'}:
+                raise ValueError(f'line {number}: expected id, split, family, group, state, question; labels/teacher endpoints are forbidden')
+            for key in ('id', 'family', 'group'):
+                if not isinstance(row[key], str) or not row[key] or len(row[key]) > 128: raise ValueError('invalid task metadata')
+            if row['id'] in ids: raise ValueError('duplicate task ID')
+            ids.add(row['id'])
+            if row['split'] not in ('train', 'validation', 'calibration', 'test'): raise ValueError('invalid split')
+            validate_request({'state': row['state'], 'questions': {'q': row['question']}})
+            content = json.dumps({'state': row['state'], 'question': row['question']}, sort_keys=True, ensure_ascii=False)
+            for mapping, key in [(groups, row['group']), (contents, content)]:
+                if key in mapping and mapping[key] != row['split']: raise ValueError('source group or duplicate content crosses splits')
+                mapping[key] = row['split']
+            rows.append(row)
+    counts = collections.Counter(r['split'] for r in rows)
+    if set(counts) != {'train', 'validation', 'calibration', 'test'}:
+        raise ValueError('nonempty train, validation, calibration and test are required')
+    return rows, dict(counts)
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--teacher-backend', choices=['gguf', 'openai'], default='gguf')
+    p.add_argument('--teacher', help='existing local GGUF path')
+    p.add_argument('--base-url', '--baseurl', dest='base_url', help='API base URL, including /v1 if required')
+    p.add_argument('--api-key', '--apikey', dest='api_key', help='API key; prefer JAX_TEACHER_API_KEY environment variable')
+    p.add_argument('--model', help='API teacher model ID')
+    p.add_argument('--api-timeout', type=float, default=120)
+    p.add_argument('--api-max-tokens', type=int, default=4096)
+    p.add_argument('--api-minimal', action='store_true', help='omit temperature/max_tokens; provider defaults apply')
+    p.add_argument('--data', required=True, type=Path)
+    p.add_argument('--output', required=True, type=Path)
+    p.add_argument('--teacher-context', type=int, default=2048)
+    p.add_argument('--teacher-gpu-layers', type=int, default=0, help='-1 all layers, 0 CPU, positive partial offload')
+    p.add_argument('--student-gpu-layers', type=int, default=0)
+    p.add_argument('--student-context', type=int, default=2048)
+    p.add_argument('--student-threads', type=int, default=2)
+    p.add_argument('--threads', type=int, default=2)
+    p.add_argument('--teacher-template', default='auto', help='auto, raw, or a supported llama.cpp template name')
+    p.add_argument('--resume', action='store_true')
+    p.add_argument('--chunk-size', type=int, default=128, help='completed shards survive interruption')
+    args = p.parse_args()
+    if not 1 <= args.chunk_size <= 2048: raise ValueError('chunk size must be 1..2048')
+    if not all(-1<=v<=10000 for v in [args.teacher_gpu_layers,args.student_gpu_layers]):raise ValueError('invalid GPU layer count')
+    if not 128<=args.student_context<=32768 or not 1<=args.student_threads<=64:raise ValueError('invalid student context/threads')
+    remote = args.teacher_backend == 'openai'
+    if remote:
+        if args.teacher or not args.base_url or not args.model:
+            raise ValueError('API teacher requires --base-url and --model, without --teacher')
+        args.base_url = base_url(args.base_url)
+        key = args.api_key or os.environ.get('JAX_TEACHER_API_KEY', '')
+        if not key or any(c in key for c in '\r\n'): raise ValueError('API key is required (--api-key or JAX_TEACHER_API_KEY)')
+        if not 1 <= args.api_timeout <= 600 or not 32 <= args.api_max_tokens <= 131072:
+            raise ValueError('invalid API timeout/token limit')
+        os.environ['JAX_TEACHER_API_KEY'] = key
+        teacher, shards = None, []
+        print(DISCLAIMER, file=sys.stderr)
+    else:
+        if not args.teacher or any(v is not None for v in (args.base_url, args.api_key, args.model)):
+            raise ValueError('GGUF backend requires --teacher and does not accept API options')
+        teacher = local_gguf(args.teacher)
+        shards = teacher_files(teacher)
+    if not 128 <= args.teacher_context <= 32768 or not 1 <= args.threads <= 64:
+        raise ValueError('invalid context or thread count')
+    data = args.data.resolve(strict=True)
+    rows, counts = preflight(data)
+    # Do not quietly repurpose our benchmark as a training dataset.
+    if ROOT / 'benchmarks' in data.parents: raise ValueError('benchmark datasets cannot be training input')
+    student = ROOT / 'models/Jax-1-Abel/backbone.gguf'
+    config = json.loads((ROOT / 'models/Jax-1-Abel/config.json').read_text())
+    student_hash = sha(student)
+    if student_hash != config['sha256']['backbone.gguf']: raise ValueError('student integrity check failed')
+    names = ['abel-features', 'distill-train'] + ([] if remote else ['gguf-teacher'])
+    binaries = {name: ROOT / 'build' / name for name in names}
+    if not all(path.is_file() for path in binaries.values()): raise ValueError('build the offline training tools first: make distill')
+    manifest = {'format': 'jax.local-gguf-distillation.v2', 'chunk_size': args.chunk_size, 'teacher_backend': 'local-llama.cpp',
+        'remote_teacher_supported': True, 'teacher_path': str(teacher) if teacher else None, 'teacher_sha256': sha(teacher) if teacher else None,
+        'teacher_shards_sha256': {str(path): sha(path) for path in shards},
+        'teacher_context': args.teacher_context, 'teacher_threads': args.threads, 'teacher_template': args.teacher_template,
+        'student_sha256': student_hash, 'dataset_sha256': sha(data), 'split_counts': counts,
+        'binary_sha256': {name: sha(path) for name, path in binaries.items()},
+        'pipeline_sha256': sha(Path(__file__)), 'chunk_cache_sha256': sha(ROOT / 'scripts/chunk_cache.py'), 'teacher_probability_temperature': 1,
+        'student_context': args.student_context, 'student_threads': args.student_threads,
+        'teacher_gpu_layers': args.teacher_gpu_layers, 'student_gpu_layers': args.student_gpu_layers}
+    if remote:
+        manifest.update(format='jax.api-distillation.v1', teacher_backend='openai-compatible',
+            api_base_url=args.base_url, api_model=args.model, api_timeout=args.api_timeout,
+            api_max_tokens=args.api_max_tokens, api_teacher_sha256=sha(ROOT/'scripts/api_teacher.py'),
+            probability_source='model-elicited-json-not-token-logprobs', api_sampling_temperature=0,
+            teacher_path=None, teacher_context=None, teacher_threads=None, teacher_template=None)
+        manifest['api_minimal_request'] = args.api_minimal
+        if args.api_minimal:
+            manifest.update(api_max_tokens=None, api_sampling_temperature=None)
+    tasks_text = ''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows)
+    manifest['canonical_tasks_sha256'] = hashlib.sha256(tasks_text.encode()).hexdigest()
+    out = args.output.resolve()
+    if out.exists() and not args.resume: raise ValueError('output exists; choose a new directory or --resume')
+    out.mkdir(parents=True, exist_ok=args.resume)
+    run_lock = (out / '.lock').open('w')
+    try: fcntl.flock(run_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError: raise ValueError('another process owns this training run')
+    provenance = out / 'provenance.json'
+    if args.resume:
+        if json.loads(provenance.read_text()) != manifest: raise ValueError('resume provenance differs')
+    else:
+        provenance.write_text(json.dumps(manifest, indent=2) + '\n')
+        (out / 'tasks.jsonl').write_text(tasks_text)
+    if sha(out / 'tasks.jsonl') != manifest['canonical_tasks_sha256']:
+        raise ValueError('copied task file integrity mismatch')
+    cache = ChunkCache(out, ROOT, {str(path): manifest['binary_sha256'][name] for name, path in binaries.items()})
+    teacher_parts, feature_parts = [], []
+    for offset in range(0, len(rows), args.chunk_size):
+        index = offset // args.chunk_size
+        task_name = f'chunks/tasks-{index:05d}.jsonl'
+        task_path = out / task_name
+        task_path.parent.mkdir(parents=True, exist_ok=True)
+        task_path.write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows[offset:offset + args.chunk_size]))
+        label_name = f'chunks/teacher-{index:05d}.jsonl'
+        teacher_parts.append(label_name)
+        if remote:
+            if sha(ROOT/'scripts/api_teacher.py') != manifest['api_teacher_sha256']:
+                raise ValueError('API adapter changed during training')
+            command = [sys.executable, str(ROOT/'scripts/api_teacher.py'), str(task_path),
+                       '--base-url', args.base_url, '--model', args.model,
+                       '--timeout', str(args.api_timeout), '--max-tokens', str(args.api_max_tokens)]
+            if args.api_minimal: command.append('--minimal')
+        else:
+            command = [str(binaries['gguf-teacher']), str(teacher), str(task_path),
+                       str(args.teacher_context), str(args.threads), args.teacher_template, str(args.teacher_gpu_layers)]
+        cache.run(label_name, command, resume_partial=remote)
+    cache.join('teacher-labels.jsonl', teacher_parts)
+    for index, label_name in enumerate(teacher_parts):
+        name = f'chunks/features-{index:05d}.jsonl'
+        feature_parts.append(name)
+        cache.run(name, [str(binaries['abel-features']), str(student), str(out / label_name),
+                        str(args.student_context), str(args.student_threads), str(args.student_gpu_layers)])
+    cache.join('features.jsonl', feature_parts)
+    # Stream large feature files; do not build a multi-gigabyte Python object graph.
+    expected = {r['id']: r for r in rows}
+    seen = set()
+    with (out / 'fit-features.jsonl').open('w') as fit, (out / 'test-features.jsonl').open('w') as test:
+        with (out / 'features.jsonl').open() as stream:
+            for line in stream:
+                r = json.loads(line)
+                if r['id'] in seen or r['id'] not in expected: raise ValueError('invalid feature ID')
+                source = expected[r['id']]
+                if r['split'] != source['split'] or r['family'] != source['family'] or r['type'] != source['question']['type']:
+                    raise ValueError('feature metadata differs from source tasks')
+                seen.add(r['id'])
+                (test if r['split'] == 'test' else fit).write(line)
+    if seen != expected.keys(): raise ValueError('missing feature IDs')
+    stages_path, stages = cache.state_path, cache.stages
+    checkpoint = out / 'checkpoint'
+    if checkpoint.exists():
+        if not args.resume or not (checkpoint / 'training_report.json').exists() or 'checkpoint/decision_head.json' not in stages:
+            raise ValueError('incomplete checkpoint; move it aside before resuming')
+        for name in ('decision_head.json', 'training_report.json'):
+            if sha(checkpoint / name) != stages.get('checkpoint/' + name):
+                raise ValueError('checkpoint integrity mismatch')
+    else:
+        atomic_json(out / 'progress.json', {'phase': 'fit', 'complete': False})
+        with (out / 'training.log').open('wb') as stream:
+            subprocess.run([str(binaries['distill-train']), 'fit', str(out / 'fit-features.jsonl'), str(checkpoint)], stdout=stream, check=True)
+        for name in ('decision_head.json', 'training_report.json'):
+            stages['checkpoint/' + name] = sha(checkpoint / name)
+        stages_path.write_text(json.dumps(stages, indent=2) + '\n')
+    for name, expected in manifest['teacher_shards_sha256'].items():
+        if sha(Path(name)) != expected: raise ValueError('teacher shard changed during training')
+    if sha(student) != student_hash: raise ValueError('student changed during training')
+    with (out / 'teacher-agreement-test.json').open('wb') as stream:
+        subprocess.run([str(binaries['distill-train']), 'evaluate', str(out / 'test-features.jsonl'), str(checkpoint / 'decision_head.json')], stdout=stream, check=True)
+    result = {'complete': True, 'model_promoted': False, 'ground_truth_quality_measured': False,
+              'teacher_sha256': manifest['teacher_sha256'], 'decision_head_sha256': sha(checkpoint / 'decision_head.json'),
+              'teacher_backend': manifest['teacher_backend'],
+              'message': 'Teacher distillation completed. Teacher agreement is not ground-truth accuracy. Existing API model unchanged.'}
+    (out / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+    atomic_json(out / 'progress.json', {'phase': 'complete', 'complete': True})
+    print(json.dumps(result, indent=2))
+
+if __name__ == '__main__':
+    try: main()
+    except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+        raise SystemExit(str(exc))

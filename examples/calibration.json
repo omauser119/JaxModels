@@ -1,0 +1,7 @@
+[
+  {"logits": [0, 8], "label": 1},
+  {"logits": [0, 8], "label": 0},
+  {"logits": [0, 8], "label": 1},
+  {"logits": [4, 0, -2], "label": 0},
+  {"logits": [4, 0, -2], "label": 1}
+]

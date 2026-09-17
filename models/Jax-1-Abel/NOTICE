@@ -1,0 +1,5 @@
+Jax-1-Abel 0.2.0-pilot.1 — Jax AI
+Frozen Qwen3.5-0.8B backbone, Copyright Qwen contributors, Apache-2.0.
+GGUF conversion: unsloth/Qwen3.5-0.8B-GGUF.
+Jax residual decision head and modifications: Jax AI, Apache-2.0.
+Training includes modified Amazon MASSIVE / SLURP data, CC-BY-4.0; see data/abel-pilot-100/NOTICE-MASSIVE.md.

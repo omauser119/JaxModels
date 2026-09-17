@@ -1,0 +1,13 @@
+name: Source checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  cpu-unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install development headers
+        run: sudo apt-get update && sudo apt-get install -y g++ make pkg-config libjson-c-dev libcurl4-openssl-dev
+      - name: Test source contracts (no model download)
+        run: make -j2 check-runtime

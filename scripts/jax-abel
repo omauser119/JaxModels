@@ -1,0 +1,33 @@
+#!/usr/bin/env python3
+"""Run the pinned Jax-1-Abel checkpoint; never silently fall back to base Qwen."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+
+root=Path(__file__).resolve().parents[1]
+model_dir=root/'models/Jax-1-Abel'
+config_path=model_dir/'config.json'
+if not config_path.is_file():
+    raise SystemExit('Jax-1-Abel release is not assembled yet; config.json is missing.')
+config=json.loads(config_path.read_text())
+if config.get('model_id')!='Jax-1-Abel' or config.get('format')!='jax.model.v1':
+    raise SystemExit('Unsupported Jax model configuration.')
+if len(sys.argv)==2 and sys.argv[1]=='info':
+    print(json.dumps(config,indent=2,ensure_ascii=False));raise SystemExit(0)
+if len(sys.argv)<2:
+    raise SystemExit('Usage: scripts/jax-abel infer request.json\n       scripts/jax-abel info')
+if not ((sys.argv[1]=='infer' and len(sys.argv)==3) or (sys.argv[1]=='stream' and len(sys.argv)==2)):
+    raise SystemExit('Abel inference uses its bundled temperature: scripts/jax-abel infer request.json')
+for name in ('backbone.gguf','decision_head.json'):
+    path=model_dir/name
+    if not path.is_file():raise SystemExit(f'Missing model component: {path}')
+    with path.open('rb') as source:actual=hashlib.file_digest(source,'sha256').hexdigest()
+    if actual!=config['sha256'][name]:raise SystemExit(f'Model integrity check failed: {name}')
+binary=root/'build/jax-native'
+if not binary.is_file():raise SystemExit('Build native runtime first: scripts/build-native.sh')
+env=dict(os.environ,JAX_MODEL_PATH=str(model_dir/'backbone.gguf'),JAX_HEAD=str(model_dir/'decision_head.json'))
+env.setdefault('JAX_CTX',str(config['runtime']['context']))
+env.setdefault('JAX_THREADS',str(config['runtime']['threads']))
+os.execve(binary,[str(binary),*sys.argv[1:]],env)

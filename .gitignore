@@ -1,0 +1,15 @@
+/build/
+/vendor
+/.tools/
+/.venv
+/runtime/
+/training/
+/releases/
+/data/sources/
+/benchmarks/runs/
+*.gguf
+*.part
+__pycache__/
+node_modules/
+.env
+.env.*

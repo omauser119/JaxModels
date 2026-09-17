@@ -1,0 +1,29 @@
+{
+  "benchmark": "Jax DecisionBench",
+  "version": "1.0.0",
+  "seed": 19092026,
+  "cases": 2560,
+  "base_scenarios": 640,
+  "dev_cases": 640,
+  "test_cases": 1920,
+  "families": [
+    "stock_policy",
+    "membership",
+    "negated_request",
+    "latest_event",
+    "document_kind",
+    "dynamic_routing",
+    "completion_score",
+    "deadline_score"
+  ],
+  "languages": [
+    "en",
+    "ru"
+  ],
+  "license": "MIT",
+  "source": "authored symbolic synthetic scenarios; related templates; not independent real-world evidence",
+  "sha256": {
+    "requests.jsonl": "54c87c5ebe3dc7c48960c9cc2184074415db751beb0ab70e273f758554e3b527",
+    "references.jsonl": "038bfad667dd0e95a9bd566abd3f1bfb792616dda0eb10a2cce25e599400b16e"
+  }
+}

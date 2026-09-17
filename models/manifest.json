@@ -1,0 +1,15 @@
+{
+  "base_model": "Qwen/Qwen3.5-0.8B",
+  "template_revision": "2fc06364715b967f1860aea9cf38778875588b17",
+  "gguf_repository": "unsloth/Qwen3.5-0.8B-GGUF",
+  "gguf_revision": "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
+  "file": "Qwen3.5-0.8B-Q8_0.gguf",
+  "size": 811843840,
+  "sha256": "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c",
+  "license": "Apache-2.0",
+  "llama_cpp_revision": "7ceed8737fdb4eb09b4760e77bd12d38012de5a8",
+  "backend": "CPU",
+  "context": 2048,
+  "threads": 2,
+  "thinking": false
+}

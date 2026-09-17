@@ -1,0 +1,30 @@
+{
+  "format": "jax.pilot.corpus.v1",
+  "tasks": 100,
+  "split_counts": {
+    "train": 70,
+    "validation": 10,
+    "calibration": 10,
+    "test": 10
+  },
+  "source": "Amazon MASSIVE 1.1 EN/RU (human intent annotations) + authored symbolic rules",
+  "source_counts": {
+    "human-annotated": 80,
+    "synthetic": 20
+  },
+  "source_attribution": {
+    "authors": "Amazon Alexa AI / MASSIVE contributors; SLURP contributors",
+    "url": "https://huggingface.co/datasets/AmazonScience/massive",
+    "license": "CC-BY-4.0",
+    "changes": "Subset EN/RU; dynamic 4-choice/binary intent questions; test annotations kept separate."
+  },
+  "excluded_cross_partition_source_ids": 596,
+  "source_provenance_sha256": "2961b7283d16f4a9118cff466753fca38fc58370c9fe51a44cce608cb71d1e6b",
+  "production_evidence": false,
+  "limitations": "Adapted intent benchmark plus synthetic rules; not arbitrary-domain universal validation. Source may have appeared in backbone pretraining.",
+  "sha256": {
+    "tasks.jsonl": "27cb5fdc4e67962fc3165d0b912e349cd2ed9f9368d2c50caa821d6773f4e6fd",
+    "references.jsonl": "d88eaf6f15c4b64a5152bc9e6d1700dd6f4e0d0913476517c478d92a7d821534"
+  },
+  "parent_tasks_sha256": "2b89b8057e1c746bf864e31ba6f3ec55f5a643f083bc84945cbd0f556a443aeb"
+}
