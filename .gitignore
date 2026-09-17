@@ -13,3 +13,7 @@ __pycache__/
 node_modules/
 .env
 .env.*
+
+# Notebook files are intentionally excluded from the public source tree.
+*.ipynb
+.ipynb_checkpoints/

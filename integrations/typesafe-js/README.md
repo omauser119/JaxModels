@@ -1,6 +1,6 @@
-# TypeSafe SDK → локальный Abel
+# TypeSafe SDK → local Abel
 
-Проверено с официальным `@typesafe-ai/sdk@0.6.0`. Исходники исследованы на commit `66880ccded6cb642dc1809620c2b108c33730214` [typesafe-ai/typesafe-sdk-js](https://github.com/typesafe-ai/typesafe-sdk-js/tree/66880ccded6cb642dc1809620c2b108c33730214).
+Tested with the official `@typesafe-ai/sdk@0.6.0`. SDK source was reviewed at commit `66880ccded6cb642dc1809620c2b108c33730214`: [typesafe-ai/typesafe-sdk-js](https://github.com/typesafe-ai/typesafe-sdk-js/tree/66880ccded6cb642dc1809620c2b108c33730214).
 
 ```bash
 npm ci --prefix integrations/typesafe-js --ignore-scripts --no-audit --no-fund
@@ -8,7 +8,7 @@ npm run example --prefix integrations/typesafe-js
 npm test --prefix integrations/typesafe-js
 ```
 
-Основные параметры:
+Start the local server first, following the [serving guide](../../docs/SERVING.md). Main client settings:
 
 ```js
 const client = new TypeSafeClient({
@@ -20,6 +20,6 @@ const client = new TypeSafeClient({
 });
 ```
 
-Локальный ключ `local-development` удовлетворяет требованию SDK. Если сервер запущен с `JAX_SERVICE_TOKEN`, нужен именно этот токен. Адрес включает только корень: SDK сам добавляет `/v1/systemone` или `/v1/models`. Не оставляйте defaultModel по умолчанию: SDK выбирает Jev, которого наш сервер не предоставляет.
+The `local-development` placeholder satisfies the SDK's API-key requirement. If the server has `JAX_SERVICE_TOKEN` configured, use that exact token. The base URL contains only the root address: the SDK appends `/v1/systemone` or `/v1/models`. Set `defaultModel` explicitly: the SDK otherwise selects Jev, which this server does not provide.
 
-Поддержаны `systemOne`, `models.list`, `withResponse`, request ID, ошибки HTTP, Choice/Score/Noul. Лимиты и численные semantics — [профиль Abel](../../docs/SERVING.md). Веса, качество, confidence и производительность не тождественны Jev. Пример вызывает только localhost.
+Supported: `systemOne`, `models.list`, `withResponse`, request IDs, HTTP errors and Choice/Score/Noul. See the [serving guide](../../docs/SERVING.md) for limits and the [architecture](../../docs/ARCHITECTURE.md) for numerical semantics. Weights, quality, confidence and performance are not equivalent to Jev. The example calls localhost only. Set `JAX_TEST_URL` to test a different local server address.
